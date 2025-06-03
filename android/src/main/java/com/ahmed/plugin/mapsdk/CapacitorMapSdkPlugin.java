@@ -1,5 +1,6 @@
 package com.ahmed.plugin.mapsdk;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -9,18 +10,23 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.RectF;
+import android.graphics.Point;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.location.Address;
 import android.location.Geocoder;
+import android.location.Location;
 import android.os.Bundle;
 import android.util.Base64;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 
-import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.JSArray;
@@ -29,6 +35,8 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.PluginMethod;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 
 import com.google.android.gms.maps.*;
 import com.google.android.gms.maps.model.*;
@@ -38,16 +46,26 @@ import org.json.JSONException;
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
+import java.util.ArrayList;
 
 @CapacitorPlugin(name = "CapacitorMapSdk")
 public class CapacitorMapSdkPlugin extends Plugin {
 
     private static final String MAPS_TAG = "CAPACITOR_MAPS_SDK_TAGS";
+    private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
+
     private GoogleMap googleMap;
     private MapView mapView;
     private Typeface mdiTypeface = null;
     private FrameLayout mapContainer = null;
     private String mapId = "default-map";
+    private List<Marker> markers = new ArrayList<>();
+
+    // Location services
+    private FusedLocationProviderClient fusedLocationClient;
+    private ImageButton currentLocationButton;
+    private boolean showLocationButton = true;
+    private PluginCall pendingLocationCall = null;
 
     // Map configuration
     private int mapX = 0;
@@ -61,12 +79,16 @@ public class CapacitorMapSdkPlugin extends Plugin {
         if (mdiTypeface == null) {
             mdiTypeface = Typeface.createFromAsset(getContext().getAssets(), "fonts/mdi.ttf");
         }
+
+        // Initialize location services
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(getActivity());
     }
 
     @PluginMethod
     public void initialize(PluginCall call) throws PackageManager.NameNotFoundException {
         Context context = getContext();
         String apiKey = call.getString("apiKey");
+
 
         if (apiKey == null || apiKey.isEmpty()) {
             call.reject("API key is required");
@@ -75,6 +97,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
         // Store map configuration
         String containerId = call.getString("containerId", "map-container");
+        showLocationButton = call.getBoolean("showLocationButton", false);
 
         // Get map dimensions and position from the container
         getActivity().runOnUiThread(() -> {
@@ -91,6 +114,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
                 mapWidth = container.getWidth();
                 mapHeight = container.getHeight();
             }
+
 
             initializeMap(apiKey, call);
         });
@@ -125,6 +149,11 @@ public class CapacitorMapSdkPlugin extends Plugin {
                     // Set up listeners
                     setupMapListeners();
 
+                    // Create location button if enabled
+                    if (showLocationButton) {
+                        createLocationButton(call);
+                    }
+
                     call.resolve();
                 });
             } else {
@@ -141,34 +170,225 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
     private void createMapOverlay() {
         Bridge bridge = getBridge();
+        Context context = bridge.getContext();
 
-        // Create map container similar to the Kotlin version
-        mapContainer = new FrameLayout(bridge.getContext());
+        // Create map container
+        mapContainer = new FrameLayout(context);
         mapContainer.setTag(mapId);
 
-        // Set minimum dimensions
-        mapContainer.setMinimumHeight(bridge.getWebView().getHeight());
-        mapContainer.setMinimumWidth(bridge.getWebView().getWidth());
-
-        // Create layout params for positioning
-        FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
-                getScaledPixels(bridge, mapWidth),
-                getScaledPixels(bridge, mapHeight)
+        // Set layout params for the map container
+        FrameLayout.LayoutParams containerParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
         );
-        layoutParams.leftMargin = getScaledPixels(bridge, mapX);
-        layoutParams.topMargin = getScaledPixels(bridge, mapY);
+        mapContainer.setLayoutParams(containerParams);
 
-        // Add mapView to container
-        mapView.setLayoutParams(layoutParams);
+        // Create layout params for the map view
+        FrameLayout.LayoutParams mapParams = new FrameLayout.LayoutParams(
+                mapWidth > 0 ? getScaledPixels(bridge, mapWidth) : FrameLayout.LayoutParams.MATCH_PARENT,
+                mapHeight > 0 ? getScaledPixels(bridge, mapHeight) : FrameLayout.LayoutParams.MATCH_PARENT
+        );
+
+        if (mapX > 0) mapParams.leftMargin = getScaledPixels(bridge, mapX);
+        if (mapY > 0) mapParams.topMargin = getScaledPixels(bridge, mapY);
+
+        mapView.setLayoutParams(mapParams);
         mapContainer.addView(mapView);
 
         // Add container to WebView parent
         ViewGroup webViewParent = (ViewGroup) bridge.getWebView().getParent();
-        webViewParent.addView(mapContainer);
+        webViewParent.addView(mapContainer, 0); // Add at index 0 (behind WebView)
 
-        // Ensure WebView stays on top for UI elements
-        bridge.getWebView().bringToFront();
+        // Make WebView background transparent so map shows through
         bridge.getWebView().setBackgroundColor(Color.TRANSPARENT);
+
+        // Enable hardware acceleration for better performance
+        mapView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        mapContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+    }
+
+    private void createLocationButton(PluginCall call) {
+        JSObject locationButtonPosition = call.getObject("locationButtonPosition", null);
+
+        Integer left = 0;
+        Integer right = 0;
+        Integer top = 0;
+        Integer bottom = 0;
+
+        if (locationButtonPosition != null) {
+            if (locationButtonPosition.has("left")) {
+                left = locationButtonPosition.getInteger("left");
+            }
+            if (locationButtonPosition.has("right")) {
+                right = locationButtonPosition.getInteger("right");
+            }
+            if (locationButtonPosition.has("top")) {
+                top = locationButtonPosition.getInteger("top");
+            }
+            if (locationButtonPosition.has("bottom")) {
+                bottom = locationButtonPosition.getInteger("bottom");
+            }
+        }
+        Context context = getContext();
+
+        // Create the button
+        currentLocationButton = new ImageButton(context);
+
+        // Create custom colored background
+        Drawable locationIcon = ContextCompat.getDrawable(context, android.R.drawable.ic_menu_mylocation);
+        if (locationIcon != null) {
+            locationIcon.setTint(Color.BLACK); // Black icon
+        }
+
+        // Set button style and icon
+        currentLocationButton.setImageDrawable(locationIcon);
+        currentLocationButton.setBackgroundColor(Color.WHITE); // White background
+        currentLocationButton.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
+        currentLocationButton.setPadding(20, 20, 20, 20);
+
+        // Add rounded corners and elevation for shadow
+        currentLocationButton.setElevation(8f); // Shadow
+        currentLocationButton.setStateListAnimator(null); // Remove default animation
+
+        // Create rounded background drawable
+        android.graphics.drawable.GradientDrawable roundedBackground = new android.graphics.drawable.GradientDrawable();
+        roundedBackground.setColor(Color.WHITE);
+        roundedBackground.setCornerRadius(24f); // Rounded corners (adjust as needed)
+        roundedBackground.setStroke(1, Color.parseColor("#E0E0E0")); // Optional subtle border
+
+        // Set the rounded background
+        currentLocationButton.setBackground(roundedBackground);
+
+        // Set button size and position
+        int buttonSize = getScaledPixels(getBridge(), 48);
+        int margin = getScaledPixels(getBridge(), 16);
+
+        FrameLayout.LayoutParams buttonParams = new FrameLayout.LayoutParams(
+                buttonSize, buttonSize
+        );
+
+        // Position to bottom right
+        buttonParams.gravity = Gravity.BOTTOM | Gravity.END;
+        buttonParams.setMargins(left, top,  right, bottom + 200);
+
+        currentLocationButton.setLayoutParams(buttonParams);
+
+        // Set click listener
+        currentLocationButton.setOnClickListener(v -> getCurrentLocation());
+
+        // Add button to map container
+        mapContainer.addView(currentLocationButton);
+
+
+    }
+
+    @PluginMethod
+    public void toggleLocationButton(PluginCall call) {
+        boolean show = call.getBoolean("show", true);
+
+        getActivity().runOnUiThread(() -> {
+            if (currentLocationButton != null) {
+                currentLocationButton.setVisibility(show ? View.VISIBLE : View.GONE);
+                showLocationButton = show;
+
+                JSObject result = new JSObject();
+                result.put("visible", show);
+                call.resolve(result);
+            } else {
+                call.reject("Location button not initialized");
+            }
+        });
+    }
+
+    @PluginMethod
+    public void getCurrentLocation(PluginCall call) {
+        pendingLocationCall = call;
+        getCurrentLocation();
+    }
+
+    private void getCurrentLocation() {
+        // Check location permission
+        if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+
+            // Request permission
+            ActivityCompat.requestPermissions(getActivity(),
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                    LOCATION_PERMISSION_REQUEST_CODE);
+            return;
+        }
+
+        // Get current location
+        fusedLocationClient.getLastLocation()
+                .addOnSuccessListener(getActivity(), location -> {
+                    if (location != null) {
+                        double latitude = location.getLatitude();
+                        double longitude = location.getLongitude();
+
+                        // Move camera to current location
+                        getActivity().runOnUiThread(() -> {
+                            if (googleMap != null) {
+                                LatLng currentLatLng = new LatLng(latitude, longitude);
+                                googleMap.animateCamera(
+                                        CameraUpdateFactory.newLatLngZoom(currentLatLng, 18f)
+                                );
+
+                                // Notify listeners
+                                JSObject data = new JSObject();
+                                data.put("latitude", latitude);
+                                data.put("longitude", longitude);
+                                data.put("accuracy", location.getAccuracy());
+                                notifyListeners("onLocationFound", data);
+
+                                // Resolve pending call if exists
+                                if (pendingLocationCall != null) {
+                                    pendingLocationCall.resolve(data);
+                                    pendingLocationCall = null;
+                                }
+                            }
+                        });
+                    } else {
+                        if (pendingLocationCall != null) {
+                            pendingLocationCall.reject("Unable to get current location");
+                            pendingLocationCall = null;
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    if (pendingLocationCall != null) {
+                        pendingLocationCall.reject("Failed to get location: " + e.getMessage());
+                        pendingLocationCall = null;
+                    }
+                });
+    }
+
+    @PluginMethod
+    public void moveToPosition(PluginCall call) {
+        if (googleMap == null) {
+            call.reject("Map not ready");
+            return;
+        }
+
+        double lat = call.getDouble("latitude", 0.0);
+        double lng = call.getDouble("longitude", 0.0);
+        float zoom = call.getFloat("zoom", 15.0F);
+        boolean animate = call.getBoolean("animate", true);
+
+        getActivity().runOnUiThread(() -> {
+            LatLng position = new LatLng(lat, lng);
+
+            if (animate) {
+                googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(position, zoom));
+            } else {
+                googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(position, zoom));
+            }
+
+            JSObject result = new JSObject();
+            result.put("latitude", lat);
+            result.put("longitude", lng);
+            result.put("zoom", zoom);
+            call.resolve(result);
+        });
     }
 
     @PluginMethod
@@ -183,6 +403,9 @@ public class CapacitorMapSdkPlugin extends Plugin {
         int y = call.getInt("y", mapY);
         int width = call.getInt("width", mapWidth);
         int height = call.getInt("height", mapHeight);
+
+
+
 
         getActivity().runOnUiThread(() -> {
             Bridge bridge = getBridge();
@@ -208,24 +431,6 @@ public class CapacitorMapSdkPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void setMapVisibility(PluginCall call) {
-        if (mapView == null) {
-            call.reject("Map not initialized");
-            return;
-        }
-
-        boolean visible = call.getBoolean("visible", true);
-
-        getActivity().runOnUiThread(() -> {
-            mapView.setVisibility(visible ? View.VISIBLE : View.GONE);
-            if (mapContainer != null) {
-                mapContainer.setVisibility(visible ? View.VISIBLE : View.GONE);
-            }
-            call.resolve();
-        });
-    }
-
-    @PluginMethod
     public void destroyMap(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             if (mapContainer != null) {
@@ -243,38 +448,110 @@ public class CapacitorMapSdkPlugin extends Plugin {
             googleMap = null;
             mapView = null;
             mapContainer = null;
+            currentLocationButton = null;
 
             call.resolve();
         });
     }
 
     @PluginMethod
-    public void bringToFront(PluginCall call) {
-        if (mapContainer == null) {
+    public void enableMapInteraction(PluginCall call) {
+        if (mapView == null) {
             call.reject("Map not initialized");
             return;
         }
 
         getActivity().runOnUiThread(() -> {
-            mapContainer.bringToFront();
+            // Bring map to front when interaction is needed
+            if (mapContainer != null) {
+                mapContainer.bringToFront();
+                // Set elevation to ensure it's above other views
+                mapContainer.setElevation(10f);
+                // Reset WebView elevation
+                getBridge().getWebView().setElevation(0f);
+            }
+
+            // Add a small delay to prevent immediate re-triggering
+            mapContainer.postDelayed(() -> {
+
+            }, 50);
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void disableMapInteraction(PluginCall call) {
+        if (mapView == null) {
+            call.reject("Map not initialized");
+            return;
+        }
+
+        getActivity().runOnUiThread(() -> {
+            // Reset elevation and bring WebView to front
+            if (mapContainer != null) {
+                mapContainer.setElevation(-40f);
+            }
+            getBridge().getWebView().bringToFront();
+            // Set WebView elevation higher to ensure it's on top
+            getBridge().getWebView().setElevation(20f);
+
             call.resolve();
         });
     }
 
     private void setupMapListeners() {
-        // Marker click listener
         googleMap.setOnMarkerClickListener(marker -> {
+            LatLng position = marker.getPosition();
+
+            Projection projection = googleMap.getProjection();
+            Point screenPoint = projection.toScreenLocation(position);
+
+            int[] mapLocation = new int[2];
+            mapView.getLocationOnScreen(mapLocation);
+
+            int[] containerLocation = new int[2];
+            mapContainer.getLocationOnScreen(containerLocation);
+
+            float density = getActivity().getResources().getDisplayMetrics().density;
+
+            int mapPaddingLeft = mapView.getPaddingLeft();
+            int mapPaddingTop = mapView.getPaddingTop();
+
+            int absoluteX = (int) ((mapLocation[0] + screenPoint.x + mapPaddingLeft) / density);
+            int absoluteY = (int) ((mapLocation[1] + screenPoint.y + mapPaddingTop) / density);
+
+            int webViewX = (int) ((containerLocation[0] + mapX + screenPoint.x) / density);
+            int webViewY = (int) ((containerLocation[1] + mapY + screenPoint.y) / density);
+
             JSObject data = new JSObject();
             data.put("mapId", mapId);
             data.put("latitude", marker.getPosition().latitude);
             data.put("longitude", marker.getPosition().longitude);
             data.put("title", marker.getTitle());
             data.put("markerId", marker.getId());
+
+            data.put("screenX", webViewX);
+            data.put("screenY", webViewY);
+
+            data.put("mapX", screenPoint.x);
+            data.put("mapY", screenPoint.y);
+
+            data.put("debug", new JSObject() {{
+                put("mapLocationX", mapLocation[0]);
+                put("mapLocationY", mapLocation[1]);
+                put("containerLocationX", containerLocation[0]);
+                put("containerLocationY", containerLocation[1]);
+                put("density", density);
+                put("mapX", absoluteX);
+                put("mapY", absoluteY);
+                put("screenPointX", screenPoint.x);
+                put("screenPointY", screenPoint.y);
+            }});
+
             notifyListeners("onMarkerClick", data);
-            return false;
+            return true;
         });
 
-        // Marker drag listener
         googleMap.setOnMarkerDragListener(new GoogleMap.OnMarkerDragListener() {
             @Override
             public void onMarkerDragStart(Marker marker) {
@@ -334,6 +611,50 @@ public class CapacitorMapSdkPlugin extends Plugin {
             data.put("longitude", latLng.longitude);
             notifyListeners("onMapClick", data);
         });
+
+        googleMap.setOnCameraMoveListener(() -> {
+            LatLngBounds bounds = googleMap.getProjection().getVisibleRegion().latLngBounds;
+            JSObject data = new JSObject();
+
+            data.put("north", bounds.northeast.latitude);
+            data.put("south", bounds.southwest.latitude);
+            data.put("east", bounds.northeast.longitude);
+            data.put("west", bounds.southwest.longitude);
+            data.put("center_lat", bounds.getCenter().latitude);
+            data.put("center_lng", bounds.getCenter().longitude);
+            notifyListeners("onBoundsChanged", data);
+        });
+    }
+
+    @PluginMethod
+    public void clearMarkers(PluginCall call) {
+        if (googleMap == null) {
+            call.reject("Map not ready");
+            return;
+        }
+
+        getActivity().runOnUiThread(() -> {
+            try {
+                // Remove all markers from the map
+                for (Marker marker : markers) {
+                    if (marker != null) {
+                        marker.remove();
+                    }
+                }
+
+                // Clear the markers list
+                markers.clear();
+
+                JSObject result = new JSObject();
+                result.put("cleared", true);
+                result.put("message", "All markers cleared successfully");
+                call.resolve(result);
+
+            } catch (Exception e) {
+                Log.e(MAPS_TAG, "Error clearing markers: " + e.getMessage());
+                call.reject("Failed to clear markers: " + e.getMessage());
+            }
+        });
     }
 
     @PluginMethod
@@ -355,6 +676,10 @@ public class CapacitorMapSdkPlugin extends Plugin {
                     .title(title)
                     .draggable(draggable)
             );
+
+            if (marker != null) {
+                markers.add(marker);
+            }
 
             JSObject result = new JSObject();
             result.put("markerId", marker.getId());
@@ -415,6 +740,10 @@ public class CapacitorMapSdkPlugin extends Plugin {
                     .icon(BitmapDescriptorFactory.fromBitmap(bitmap))
             );
 
+            if (marker != null) {
+                markers.add(marker);
+            }
+
             JSObject result = new JSObject();
             result.put("markerId", marker.getId());
             call.resolve(result);
@@ -436,6 +765,32 @@ public class CapacitorMapSdkPlugin extends Plugin {
             LatLng position = new LatLng(lat, lng);
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(position, zoom));
             call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void setZoomLimits(PluginCall call) {
+        if (googleMap == null) {
+            call.reject("Map not ready");
+            return;
+        }
+
+        Float minZoom = call.getFloat("minZoom");
+        Float maxZoom = call.getFloat("maxZoom");
+
+        getActivity().runOnUiThread(() -> {
+            try {
+                UiSettings uiSettings = googleMap.getUiSettings();
+                if (minZoom != null) {
+                    googleMap.setMinZoomPreference(minZoom);
+                }
+                if (maxZoom != null) {
+                    googleMap.setMaxZoomPreference(maxZoom);
+                }
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Failed to set zoom limits: " + e.getMessage());
+            }
         });
     }
 

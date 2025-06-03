@@ -1,37 +1,523 @@
-# capacitor-maps-sdk
+# Capacitor Maps SDK
 
-A Capacitor Plugin for Managing Google Maps SDK
+A powerful and customizable Capacitor plugin for integrating Google Maps into your Android apps. Designed to support dynamic API keys, custom marker rendering (including icons and color schemes), camera controls, location services, and comprehensive event listeners for all map interactions.
 
-## Install
+## ✨ Features
+
+- 📍 Add default or custom markers (with `mdiIcon` or base64 `iconImage`)
+- 🎨 Fully stylable custom markers using color sets
+- 🔄 Optional draggable support for all markers
+- 🎯 Move and control the camera programmatically with animation support
+- 📍 Built-in location services with custom location button
+- 🎭 Real-time marker interactions: Click, drag start, drag, and drag end events
+- 🗺️ Map interaction events: Click and bounds changed
+- 🔧 Dynamic map bounds updates
+- ⚡ Enable/disable map interaction on demand
+- 🎮 Zoom limits configuration
+- 🧹 Clear all markers at once
+- 🗑️ Destroy and clean up map from view
+
+## 📁 Install
 
 ```bash
 npm install capacitor-maps-sdk
 npx cap sync
 ```
 
-## API
+## 🔧 Configuration
 
-<docgen-index>
+Add the Google Maps API key to your `android/app/src/main/AndroidManifest.xml`:
 
-* [`echo(...)`](#echo)
-
-</docgen-index>
-
-<docgen-api>
-<!--Update the source file JSDoc comments and rerun docgen to update the docs below-->
-
-### echo(...)
-
-```typescript
-echo(options: { value: string; }) => Promise<{ value: string; }>
+```xml
+<meta-data
+    android:name="com.google.android.geo.API_KEY"
+    android:value="YOUR_API_KEY" />
 ```
 
-| Param         | Type                            |
-| ------------- | ------------------------------- |
-| **`options`** | <code>{ value: string; }</code> |
+Add location permissions if using location features:
 
-**Returns:** <code>Promise&lt;{ value: string; }&gt;</code>
+```xml
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+```
 
---------------------
+## 📃 API Reference
 
-</docgen-api>
+### initialize
+
+Initializes the map with Google Maps API key and configuration options.
+
+```ts
+initialize(options: {
+  apiKey: string;
+  containerId?: string;
+  showLocationButton?: boolean;
+  locationButtonPosition?: {
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
+  };
+}): Promise<void>
+```
+
+**Parameters:**
+
+- `apiKey`: Your Google Maps API key
+- `containerId`: HTML container ID (default: "map-container")
+- `showLocationButton`: Show current location button (default: false)
+- `locationButtonPosition`: Position of location button in pixels
+
+### addMarker
+
+Adds a simple marker with optional title and drag capability.
+
+```ts
+addMarker(options: {
+  latitude: number;
+  longitude: number;
+  title?: string;
+  draggable?: boolean;
+}): Promise<{ markerId: string }>
+```
+
+### addCustomMarker
+
+Adds a custom-styled marker using a Material Design Icon or base64 image.
+
+```ts
+addCustomMarker(options: {
+  position: { latitude: number; longitude: number };
+  mdiIcon?: string;
+  iconImage?: string;
+  colors?: string[];
+  draggable?: boolean;
+}): Promise<{ markerId: string }>
+```
+
+**Parameters:**
+
+- `position`: Marker coordinates
+- `mdiIcon`: Material Design Icon identifier
+- `iconImage`: Base64 encoded PNG image (format: "data:image/png;base64,...")
+- `colors`: Array of 3 colors [outerCircle, innerCircle, iconColor] for default markers
+- `draggable`: Enable marker dragging
+
+### moveCamera / moveToPosition
+
+Moves the camera to a specific position with optional zoom and animation.
+
+```ts
+moveToPosition(options: {
+  latitude: number;
+  longitude: number;
+  zoom?: number;
+  animate?: boolean;
+}): Promise<{ latitude: number; longitude: number; zoom: number }>
+```
+
+```ts
+moveCamera(options: {
+  latitude: number;
+  longitude: number;
+  zoom?: number;
+}): Promise<void>
+```
+
+### Location Services
+
+#### getCurrentLocation
+
+Gets the current device location and moves camera to it.
+
+```ts
+getCurrentLocation(): Promise<{
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+}>
+```
+
+#### toggleLocationButton
+
+Shows or hides the current location button.
+
+```ts
+toggleLocationButton(options: {
+  show: boolean;
+}): Promise<{ visible: boolean }>
+```
+
+### Map Control
+
+#### updateMapBounds
+
+Updates the map container position and size.
+
+```ts
+updateMapBounds(options: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): Promise<void>
+```
+
+#### enableMapInteraction
+
+Enables map touch interactions (brings map to foreground).
+
+```ts
+enableMapInteraction(): Promise<void>
+```
+
+#### disableMapInteraction
+
+Disables map touch interactions (sends map to background).
+
+```ts
+disableMapInteraction(): Promise<void>
+```
+
+#### setZoomLimits
+
+Sets minimum and maximum zoom levels.
+
+```ts
+setZoomLimits(options: {
+  minZoom?: number;
+  maxZoom?: number;
+}): Promise<void>
+```
+
+### Marker Management
+
+#### clearMarkers
+
+Clears all currently displayed markers from the map.
+
+```ts
+clearMarkers(): Promise<{
+  cleared: boolean;
+  message: string;
+}>
+```
+
+### Cleanup
+
+#### destroyMap
+
+Completely removes the map and frees native resources.
+
+```ts
+destroyMap(): Promise<void>
+```
+
+## 🎧 Event Listeners
+
+### Marker Events
+
+#### onMarkerClick
+
+Triggered when a marker is clicked.
+
+```ts
+addListener('onMarkerClick', (data: {
+  mapId: string;
+  markerId: string;
+  latitude: number;
+  longitude: number;
+  title?: string;
+  screenX: number;
+  screenY: number;
+  mapX: number;
+  mapY: number;
+}) => void): Promise<{ remove: () => void }>
+```
+
+#### onMarkerDragStart
+
+Triggered when marker dragging starts.
+
+```ts
+addListener('onMarkerDragStart', (data: {
+  mapId: string;
+  markerId: string;
+  latitude: number;
+  longitude: number;
+  title?: string;
+}) => void): Promise<{ remove: () => void }>
+```
+
+#### onMarkerDrag
+
+Triggered during marker dragging.
+
+```ts
+addListener('onMarkerDrag', (data: {
+  mapId: string;
+  markerId: string;
+  latitude: number;
+  longitude: number;
+  title?: string;
+}) => void): Promise<{ remove: () => void }>
+```
+
+#### onMarkerDragEnd
+
+Triggered when marker dragging ends (includes reverse geocoding).
+
+```ts
+addListener('onMarkerDragEnd', (data: {
+  mapId: string;
+  markerId: string;
+  latitude: number;
+  longitude: number;
+  title?: string;
+  address?: string;
+}) => void): Promise<{ remove: () => void }>
+```
+
+### Map Events
+
+#### onMapClick
+
+Triggered when the map is clicked (not on a marker).
+
+```ts
+addListener('onMapClick', (data: {
+  mapId: string;
+  latitude: number;
+  longitude: number;
+}) => void): Promise<{ remove: () => void }>
+```
+
+#### onBoundsChanged
+
+Triggered when the map camera moves or zoom changes.
+
+```ts
+addListener('onBoundsChanged', (data: {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+  center_lat: number;
+  center_lng: number;
+}) => void): Promise<{ remove: () => void }>
+```
+
+#### onLocationFound
+
+Triggered when current location is successfully retrieved.
+
+```ts
+addListener('onLocationFound', (data: {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+}) => void): Promise<{ remove: () => void }>
+```
+
+## 💡 Interfaces
+
+### MarkerEventData
+
+```ts
+interface MarkerEventData {
+  latitude: number;
+  longitude: number;
+  title?: string;
+  address?: string;
+}
+```
+
+### Position
+
+```ts
+interface Position {
+  latitude: number;
+  longitude: number;
+}
+```
+
+## ✨ Example Usage
+
+### Basic Setup
+
+```ts
+import { CapacitorMapSdk } from 'capacitor-maps-sdk';
+
+// Initialize map with location button
+await CapacitorMapSdk.initialize({
+  apiKey: 'YOUR_GOOGLE_MAPS_API_KEY',
+  containerId: 'map-container',
+  showLocationButton: true,
+  locationButtonPosition: {
+    right: 16,
+    bottom: 100,
+  },
+});
+```
+
+### Adding Markers
+
+```ts
+// Add simple marker
+await CapacitorMapSdk.addMarker({
+  latitude: 36.75,
+  longitude: 3.06,
+  title: 'Algiers',
+  draggable: true,
+});
+
+// Add custom marker with MDI icon
+await CapacitorMapSdk.addCustomMarker({
+  position: { latitude: 36.75, longitude: 3.06 },
+  mdiIcon: '🏢',
+  colors: ['#F44336', '#FFFFFF', '#FFC107'],
+  draggable: true,
+});
+
+// Add custom marker with base64 image
+await CapacitorMapSdk.addCustomMarker({
+  position: { latitude: 36.75, longitude: 3.06 },
+  iconImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA...',
+  draggable: false,
+});
+```
+
+### Camera Control
+
+```ts
+// Move camera with animation
+await CapacitorMapSdk.moveToPosition({
+  latitude: 36.75,
+  longitude: 3.06,
+  zoom: 15,
+  animate: true,
+});
+
+// Set zoom limits
+await CapacitorMapSdk.setZoomLimits({
+  minZoom: 10,
+  maxZoom: 20,
+});
+```
+
+### Location Services
+
+```ts
+// Get current location
+try {
+  const location = await CapacitorMapSdk.getCurrentLocation();
+  console.log('Current location:', location);
+} catch (error) {
+  console.error('Location error:', error);
+}
+
+// Toggle location button
+await CapacitorMapSdk.toggleLocationButton({ show: false });
+```
+
+### Event Handling
+
+```ts
+// Listen for marker clicks
+const markerClickListener = await CapacitorMapSdk.addListener('onMarkerClick', (data) => {
+  console.log('Marker clicked:', data.title, 'at', data.latitude, data.longitude);
+  console.log('Screen position:', data.screenX, data.screenY);
+});
+
+// Listen for marker drag end (with address)
+const dragEndListener = await CapacitorMapSdk.addListener('onMarkerDragEnd', (data) => {
+  console.log('Marker moved to:', data.latitude, data.longitude);
+  if (data.address) {
+    console.log('Address:', data.address);
+  }
+});
+
+// Listen for map bounds changes
+const boundsListener = await CapacitorMapSdk.addListener('onBoundsChanged', (data) => {
+  console.log('Map bounds:', data);
+});
+
+// Remove listeners when done
+markerClickListener.remove();
+dragEndListener.remove();
+boundsListener.remove();
+```
+
+### Map Interaction Control
+
+```ts
+// Enable map interaction (user can pan/zoom)
+await CapacitorMapSdk.enableMapInteraction();
+
+// Disable map interaction (map goes to background)
+await CapacitorMapSdk.disableMapInteraction();
+
+// Update map bounds dynamically
+await CapacitorMapSdk.updateMapBounds({
+  x: 0,
+  y: 100,
+  width: 400,
+  height: 600,
+});
+```
+
+### Cleanup
+
+```ts
+// Clear all markers
+await CapacitorMapSdk.clearMarkers();
+
+// Destroy map when navigating away
+await CapacitorMapSdk.destroyMap();
+```
+
+## 🚧 Limitations
+
+- Currently supports **Android only**
+- No web implementation (throws error if used on web)
+- Location services require appropriate permissions
+- Custom markers using MDI icons require the `mdi.ttf` font file in `android/app/src/main/assets/fonts/`
+
+## 📱 Android Setup
+
+Ensure you have the following in your `android/app/build.gradle`:
+
+```gradle
+dependencies {
+    implementation 'com.google.android.gms:play-services-maps:18.1.0'
+    implementation 'com.google.android.gms:play-services-location:21.0.1'
+}
+```
+
+## 🔍 Troubleshooting
+
+### Location Button Not Showing
+
+- Verify location permissions are granted
+- Check that `showLocationButton: true` is set in initialization
+- Ensure Google Play Services is available on the device
+
+### Map Not Displaying
+
+- Verify your Google Maps API key is correct and has Maps SDK for Android enabled
+- Check that the API key is properly set in AndroidManifest.xml
+- Ensure the container element exists in your HTML
+
+### Markers Not Appearing
+
+- Verify coordinates are valid (latitude: -90 to 90, longitude: -180 to 180)
+- Check that the map is initialized before adding markers
+- For custom markers, ensure the `mdi.ttf` font file exists
+
+## 🙌 Contributions
+
+PRs are welcome! Please open an issue first to discuss what you'd like to change.
+
+## 📄 License
+
+MIT © 2025
