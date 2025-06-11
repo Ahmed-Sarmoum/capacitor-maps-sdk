@@ -364,17 +364,16 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
     @PluginMethod
     public void moveToPosition(PluginCall call) {
-        if (googleMap == null) {
-            call.reject("Map not ready");
-            return;
-        }
-
-        double lat = call.getDouble("latitude", 0.0);
-        double lng = call.getDouble("longitude", 0.0);
-        float zoom = call.getFloat("zoom", 15.0F);
-        boolean animate = call.getBoolean("animate", true);
-
         getActivity().runOnUiThread(() -> {
+            if (googleMap == null) {
+                call.reject("Map not ready");
+                return;
+            }
+
+            double lat = call.getDouble("latitude", 0.0);
+            double lng = call.getDouble("longitude", 0.0);
+            float zoom = call.getFloat("zoom", 15.0F);
+            boolean animate = call.getBoolean("animate", true);
             LatLng position = new LatLng(lat, lng);
 
             if (animate) {
@@ -393,21 +392,18 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
     @PluginMethod
     public void updateMapBounds(PluginCall call) {
-        if (mapContainer == null) {
-            call.reject("Map not initialized");
-            return;
-        }
+       getActivity().runOnUiThread(() -> {
+            if (mapContainer == null) {
+                call.reject("Map not initialized");
+                return;
+            }
 
-        // Get new bounds
-        int x = call.getInt("x", mapX);
-        int y = call.getInt("y", mapY);
-        int width = call.getInt("width", mapWidth);
-        int height = call.getInt("height", mapHeight);
+            // Get new bounds
+            int x = call.getInt("x", mapX);
+            int y = call.getInt("y", mapY);
+            int width = call.getInt("width", mapWidth);
+            int height = call.getInt("height", mapHeight);
 
-
-
-
-        getActivity().runOnUiThread(() -> {
             Bridge bridge = getBridge();
 
             // Update stored values
@@ -628,12 +624,12 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
     @PluginMethod
     public void clearMarkers(PluginCall call) {
-        if (googleMap == null) {
-            call.reject("Map not ready");
-            return;
-        }
-
         getActivity().runOnUiThread(() -> {
+            if (googleMap == null) {
+                call.reject("Map not ready");
+                return;
+            }
+
             try {
                 // Remove all markers from the map
                 for (Marker marker : markers) {
@@ -659,17 +655,17 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
     @PluginMethod
     public void addMarker(PluginCall call) {
-        if (googleMap == null) {
-            call.reject("Map not ready");
-            return;
-        }
-
-        double lat = call.getDouble("latitude", 0.0);
-        double lng = call.getDouble("longitude", 0.0);
-        String title = call.getString("title", "");
-        boolean draggable = call.getBoolean("draggable", false);
-
         getActivity().runOnUiThread(() -> {
+            if (googleMap == null) {
+                call.reject("Map not ready");
+                return;
+            }
+
+            double lat = call.getDouble("latitude", 0.0);
+            double lng = call.getDouble("longitude", 0.0);
+            String title = call.getString("title", "");
+            boolean draggable = call.getBoolean("draggable", false);
+
             LatLng position = new LatLng(lat, lng);
             Marker marker = googleMap.addMarker(new MarkerOptions()
                     .position(position)
@@ -689,23 +685,27 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
     @PluginMethod
     public void addCustomMarker(PluginCall call) throws JSONException {
-        if (googleMap == null) {
-            call.reject("Map not ready");
-            return;
-        }
-
-        JSObject position = call.getObject("position", null);
-        String iconImage = call.getString("iconImage", null);
-
-        if (position == null) {
-            call.reject("position is required");
-            return;
-        }
-
-        double lat = position.getDouble("latitude");
-        double lng = position.getDouble("longitude");
-
         getActivity().runOnUiThread(() -> {
+            if (googleMap == null) {
+                call.reject("Map not ready");
+                return;
+            }
+
+            JSObject position = call.getObject("position", null);
+            String iconImage = call.getString("iconImage", null);
+
+            if (position == null) {
+                call.reject("position is required");
+                return;
+            }
+
+            double lat, lng = 0;
+            try {
+                lat = position.getDouble("latitude");
+                lng = position.getDouble("longitude");
+            } catch (JSONException e) {
+                throw new RuntimeException(e);
+            }
             LatLng latLng = new LatLng(lat, lng);
             Bitmap bitmap = null;
 
@@ -752,16 +752,16 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
     @PluginMethod
     public void moveCamera(PluginCall call) {
-        if (googleMap == null) {
-            call.reject("Map not ready");
-            return;
-        }
-
-        double lat = call.getDouble("latitude", 0.0);
-        double lng = call.getDouble("longitude", 0.0);
-        float zoom = call.getFloat("zoom", 14.0F);
-
         getActivity().runOnUiThread(() -> {
+            if (googleMap == null) {
+                call.reject("Map not ready");
+                return;
+            }
+
+            double lat = call.getDouble("latitude", 0.0);
+            double lng = call.getDouble("longitude", 0.0);
+            float zoom = call.getFloat("zoom", 14.0F);
+
             LatLng position = new LatLng(lat, lng);
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(position, zoom));
             call.resolve();
@@ -770,15 +770,15 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
     @PluginMethod
     public void setZoomLimits(PluginCall call) {
-        if (googleMap == null) {
-            call.reject("Map not ready");
-            return;
-        }
-
-        Float minZoom = call.getFloat("minZoom");
-        Float maxZoom = call.getFloat("maxZoom");
-
         getActivity().runOnUiThread(() -> {
+            if (googleMap == null) {
+                call.reject("Map not ready");
+                return;
+            }
+
+            Float minZoom = call.getFloat("minZoom");
+            Float maxZoom = call.getFloat("maxZoom");
+
             try {
                 UiSettings uiSettings = googleMap.getUiSettings();
                 if (minZoom != null) {
