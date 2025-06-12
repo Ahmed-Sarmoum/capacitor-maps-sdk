@@ -128,6 +128,30 @@ moveCamera(options: {
 }): Promise<void>
 ```
 
+### isReady
+
+Checks if the map is fully initialized and ready for use.
+
+```ts
+isReady(): Promise<{
+  isReady: boolean;
+  mapReady: boolean;
+  mapViewReady: boolean;
+  containerReady: boolean;
+  status: string;
+  message: string;
+}>
+```
+
+**Returns:**
+
+- `isReady`: Overall status (true if all components are ready)
+- `mapReady`: True if the GoogleMap instance is available
+- `mapViewReady`: True if the MapView is initialized
+- `containerReady`: True if the map container is created
+- `status`: "ready" or "not_ready"
+- `message`: Detailed status message
+
 ### Location Services
 
 #### getCurrentLocation

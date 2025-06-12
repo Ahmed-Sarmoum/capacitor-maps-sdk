@@ -45,6 +45,15 @@ export interface CapacitorMapSdkPlugin {
    */
   destroyMap(): Promise<void>;
 
+  isReady(): Promise<{
+    isReady: boolean;
+    mapReady: boolean;
+    mapViewReady: boolean;
+    containerReady: boolean;
+    status: string;
+    message: string;
+  }>;
+
   /**
    * Clear all markers from the map
    */

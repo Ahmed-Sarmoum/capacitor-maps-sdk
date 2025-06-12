@@ -19,6 +19,17 @@ export class CapacitorMapSdkWeb extends WebPlugin implements CapacitorMapSdkPlug
     throw new Error('CapacitorMapSdk is not implemented on web');
   }
 
+  isReady(): Promise<{
+    isReady: boolean;
+    mapReady: boolean;
+    mapViewReady: boolean;
+    containerReady: boolean;
+    status: string;
+    message: string;
+  }> {
+    throw new Error('CapacitorMapSdk is not implemented on web');
+  }
+
   clearMarkers(): Promise<void> {
     throw new Error('CapacitorMapSdk is not implemented on web');
   }

@@ -207,6 +207,43 @@ public class CapacitorMapSdkPlugin extends Plugin {
         mapContainer.setLayerType(View.LAYER_TYPE_HARDWARE, null);
     }
 
+    @PluginMethod
+    public void isReady(PluginCall call) {
+        JSObject result = new JSObject();
+
+        // Check if all required components are ready
+        boolean mapReady = googleMap != null;
+        boolean mapViewReady = mapView != null;
+        boolean containerReady = mapContainer != null;
+
+        // Overall ready state
+        boolean isReady = mapReady && mapViewReady && containerReady;
+
+        result.put("isReady", isReady);
+        result.put("mapReady", mapReady);
+        result.put("mapViewReady", mapViewReady);
+        result.put("containerReady", containerReady);
+
+        // Additional status information
+        if (isReady) {
+            result.put("status", "ready");
+            result.put("message", "Map is fully initialized and ready for use");
+        } else {
+            result.put("status", "not_ready");
+            if (!mapViewReady) {
+                result.put("message", "MapView not initialized");
+            } else if (!containerReady) {
+                result.put("message", "Map container not created");
+            } else if (!mapReady) {
+                result.put("message", "GoogleMap instance not ready");
+            } else {
+                result.put("message", "Map initialization in progress");
+            }
+        }
+
+        call.resolve(result);
+    }
+
     private void createLocationButton(PluginCall call) {
         JSObject locationButtonPosition = call.getObject("locationButtonPosition", null);
 
@@ -702,7 +739,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
             double lat, lng = 0;
             try {
                 lat = position.getDouble("latitude");
-                lng = position.getDouble("longitude");
+             lng = position.getDouble("longitude");
             } catch (JSONException e) {
                 throw new RuntimeException(e);
             }
