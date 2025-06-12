@@ -100,7 +100,11 @@ addCustomMarker(options: {
 - `position`: Marker coordinates
 - `mdiIcon`: Material Design Icon identifier
 - `iconImage`: Base64 encoded PNG image (format: "data:image/png;base64,...")
-- `colors`: Array of 3 colors [outerCircle, innerCircle, iconColor] for default markers
+- `colors`: An array of three color strings (e.g., `['#RRGGBB', '#RRGGBB', '#RRGGBB']`) used to customize the appearance of the marker when `mdiIcon` is provided. The colors correspond to:
+  - Index 0: Outer circle and pin tip color
+  - Index 1: Inner circle color
+  - Index 2: MDI icon color
+    Note: Custom markers using MDI icons require the `mdi.ttf` font file to be present in `android/app/src/main/assets/fonts/`.
 - `draggable`: Enable marker dragging
 
 ### moveCamera / moveToPosition
@@ -374,8 +378,8 @@ await CapacitorMapSdk.addMarker({
 // Add custom marker with MDI icon
 await CapacitorMapSdk.addCustomMarker({
   position: { latitude: 36.75, longitude: 3.06 },
-  mdiIcon: '🏢',
-  colors: ['#F44336', '#FFFFFF', '#FFC107'],
+  mdiIcon: '🏢', // Material Design Icon (e.g., '🏢' for building)
+  colors: ['#F44336', '#FFFFFF', '#FFC107'], // [outerCircleColor, innerCircleColor, iconColor]
   draggable: true,
 });
 
@@ -475,6 +479,18 @@ await CapacitorMapSdk.clearMarkers();
 // Destroy map when navigating away
 await CapacitorMapSdk.destroyMap();
 ```
+
+## 🎨 Custom Marker Generation
+
+When using `addCustomMarker` with `mdiIcon` and `colors`, the plugin dynamically generates a marker bitmap on Android using the `generateMarkerBitmap` helper function. This function creates a layered icon with a circular base, an inner circle, a triangular pin tip, and the specified Material Design Icon.
+
+The `colors` array (`[outerCircleColor, innerCircleColor, iconColor]`) directly controls the visual elements:
+
+- The first color (`outerCircleColor`) is used for the outer circle of the marker and the triangular pin tip.
+- The second color (`innerCircleColor`) fills the inner circle of the marker.
+- The third color (`iconColor`) is applied to the `mdiIcon` itself.
+
+This allows for highly customizable markers that match your application's branding or specific visual requirements.
 
 ## 🚧 Limitations
 
