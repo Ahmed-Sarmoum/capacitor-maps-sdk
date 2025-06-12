@@ -209,7 +209,9 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
     @PluginMethod
     public void isReady(PluginCall call) {
-        call.resolve(googleMap != null);
+        JSObject result = new JSObject();
+        result.put("value", googleMap != null);
+        call.resolve(result);
     }
 
     private void createLocationButton(PluginCall call) {
