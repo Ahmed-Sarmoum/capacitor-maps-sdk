@@ -1,6 +1,6 @@
 {
   "name": "capacitor-maps-sdk",
-  "version": "1.1.28",
+  "version": "1.1.29",
   "description": "A Capacitor Plugin for Managing Google Maps SDK",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
