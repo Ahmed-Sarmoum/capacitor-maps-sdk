@@ -123,7 +123,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
         Context context = getContext();
 
         try {
-            if (!apiKey.isEmpty()) {
+            if (apiKey != null && !apiKey.isEmpty()) {
                 // Store API key in metadata
                 ApplicationInfo appInfo = context.getPackageManager().getApplicationInfo(
                         context.getPackageName(),
