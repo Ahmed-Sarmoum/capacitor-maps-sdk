@@ -12,7 +12,7 @@ interface Position {
 
 export interface CapacitorMapSdkPlugin {
   initialize(options: {
-    apiKey: string;
+    apiKey?: string; // Optionally u can set it in the manifest file
     containerId: string;
     showLocationButton: boolean;
     locationButtonPosition?: {

@@ -91,8 +91,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
 
         if (apiKey == null || apiKey.isEmpty()) {
-            call.reject("API key is required");
-            return;
+            Log.e("API key is not set", "Must be set in manifest file");
         }
 
         // Store map configuration
@@ -124,16 +123,18 @@ public class CapacitorMapSdkPlugin extends Plugin {
         Context context = getContext();
 
         try {
-            // Store API key in metadata
-            ApplicationInfo appInfo = context.getPackageManager().getApplicationInfo(
-                    context.getPackageName(),
-                    PackageManager.GET_META_DATA
-            );
-            Bundle bundle = appInfo.metaData;
-            if (bundle == null) {
-                bundle = new Bundle();
+            if (!apiKey.isEmpty()) {
+                // Store API key in metadata
+                ApplicationInfo appInfo = context.getPackageManager().getApplicationInfo(
+                        context.getPackageName(),
+                        PackageManager.GET_META_DATA
+                );
+                Bundle bundle = appInfo.metaData;
+                if (bundle == null) {
+                    bundle = new Bundle();
+                }
+                bundle.putString("com.google.android.geo.API_KEY", apiKey);
             }
-            bundle.putString("com.google.android.geo.API_KEY", apiKey);
 
             if (mapView == null) {
                 mapView = new MapView(context);
@@ -399,7 +400,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
     @PluginMethod
     public void updateMapBounds(PluginCall call) {
-       getActivity().runOnUiThread(() -> {
+        getActivity().runOnUiThread(() -> {
             if (mapContainer == null) {
                 call.reject("Map not initialized");
                 return;
@@ -709,7 +710,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
             double lat, lng = 0;
             try {
                 lat = position.getDouble("latitude");
-             lng = position.getDouble("longitude");
+                lng = position.getDouble("longitude");
             } catch (JSONException e) {
                 throw new RuntimeException(e);
             }
