@@ -662,6 +662,45 @@ public class CapacitorMapSdkPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void clearExpectMarkers(PluginCall call){
+      getActivity().runOnUiThread(() -> {
+            if (googleMap == null) {
+                call.reject("Map not ready");
+                return;
+            }
+
+            try {
+                JSArray titlesArray = call.getArray("titles");
+                 List<String> stringList = new ArrayList<>();
+
+                if (titlesArray != null) {
+                   for (int i = 0; i < titlesArray.length(); i++) {
+                       stringList.add(titlesArray.getString(i));
+                    }
+            
+                }
+                for (Marker marker : markers) {
+                    if (marker != null && !stringList.contains(marker.getTitle())) {
+                        marker.remove();
+                    }
+                }
+
+                // Clear the markers list
+                markers.clear();
+
+                JSObject result = new JSObject();
+                result.put("cleared", true);
+                result.put("message", "All markers cleared successfully");
+                call.resolve(result);
+
+            } catch (Exception e) {
+                Log.e(MAPS_TAG, "Error clearing markers: " + e.getMessage());
+                call.reject("Failed to clear markers: " + e.getMessage());
+            }
+        });  
+    }
+
+    @PluginMethod
     public void addMarker(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             if (googleMap == null) {
@@ -701,7 +740,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
             JSObject position = call.getObject("position", null);
             String iconImage = call.getString("iconImage", null);
-
+            String title = call.getString("title", "");
             if (position == null) {
                 call.reject("position is required");
                 return;
@@ -746,6 +785,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
             Marker marker = googleMap.addMarker(new MarkerOptions()
                     .position(latLng)
                     .icon(BitmapDescriptorFactory.fromBitmap(bitmap))
+                    .title(title)
             );
 
             if (marker != null) {

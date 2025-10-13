@@ -30,8 +30,11 @@ export interface CapacitorMapSdkPlugin {
     mdiIcon?: string; // use mdi icon to generate default custom marker
     iconImage?: string; // optional base64 PNG
     colors?: string[]; // use this in case of using default custom marker
+    title?: string;
     draggable?: boolean;
   }): Promise<void>;
+
+  clearExpectMarkers(options: { titles: string[] }): Promise<void>;
 
   moveCamera(options: { latitude: number; longitude: number; zoom?: number }): Promise<void>;
 

@@ -91,7 +91,9 @@ addCustomMarker(options: {
   mdiIcon?: string;
   iconImage?: string;
   colors?: string[];
+  title?: string;
   draggable?: boolean;
+
 }): Promise<{ markerId: string }>
 ```
 
@@ -230,6 +232,16 @@ clearMarkers(): Promise<{
   message: string;
 }>
 ```
+
+Removes all markers from the map except those whose title is included in the provided titles array
+
+```ts
+clearExpectMarkers(options: { titles: string[] }): Promise<void>;
+```
+
+**Parameters:**
+
+- `titles`: A list of marker titles that should remain on the map
 
 ### Cleanup
 
