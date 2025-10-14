@@ -47,6 +47,10 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Set;
+import java.util.HashSet;
 
 @CapacitorPlugin(name = "CapacitorMapSdk")
 public class CapacitorMapSdkPlugin extends Plugin {
@@ -60,6 +64,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
     private FrameLayout mapContainer = null;
     private String mapId = "default-map";
     private List<Marker> markers = new ArrayList<>();
+    private Map<String, List<Marker>> markersByTitle = new HashMap<>();
 
     // Location services
     private FusedLocationProviderClient fusedLocationClient;
@@ -646,8 +651,9 @@ public class CapacitorMapSdkPlugin extends Plugin {
                     }
                 }
 
-                // Clear the markers list
+                // Clear the markers list and title map
                 markers.clear();
+                markersByTitle.clear();
 
                 JSObject result = new JSObject();
                 result.put("cleared", true);
@@ -679,14 +685,32 @@ public class CapacitorMapSdkPlugin extends Plugin {
                     }
             
                 }
+                // Collect markers to keep (those in the stringList)
+                List<Marker> markersToKeep = new ArrayList<>();
+                Set<String> titlesToKeep = new HashSet<>(stringList);
+
                 for (Marker marker : markers) {
-                    if (marker != null && !stringList.contains(marker.getTitle())) {
-                        marker.remove();
+                    if (marker != null) {
+                        String markerTitle = marker.getTitle();
+                        if (titlesToKeep.contains(markerTitle)) {
+                            markersToKeep.add(marker);
+                        } else {
+                            marker.remove();
+                        }
                     }
                 }
 
-                // Clear the markers list
-                markers.clear();
+                // Update markers list to only contain kept markers
+                markers = markersToKeep;
+
+                // Update title map to only contain kept markers
+                markersByTitle.clear();
+                for (Marker marker : markers) {
+                    if (marker != null) {
+                        String title = marker.getTitle();
+                        markersByTitle.computeIfAbsent(title, k -> new ArrayList<>()).add(marker);
+                    }
+                }
 
                 JSObject result = new JSObject();
                 result.put("cleared", true);
@@ -722,6 +746,8 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
             if (marker != null) {
                 markers.add(marker);
+                // Add to title map for efficient lookups
+                markersByTitle.computeIfAbsent(title, k -> new ArrayList<>()).add(marker);
             }
 
             JSObject result = new JSObject();
@@ -729,6 +755,50 @@ public class CapacitorMapSdkPlugin extends Plugin {
             call.resolve(result);
         });
     }
+
+    @PluginMethod
+public void clearMarkersByTitle(PluginCall call) {
+    getActivity().runOnUiThread(() -> {
+        if (googleMap == null) {
+            call.reject("Map not ready");
+            return;
+        }
+
+        try {
+            String title = call.getString("title");
+            
+            if (title == null || title.isEmpty()) {
+                call.reject("Title parameter is required");
+                return;
+            }
+
+            // Use title map for O(1) lookup instead of O(n) loop
+            List<Marker> markersToRemove = markersByTitle.get(title);
+
+            int removedCount = 0;
+            if (markersToRemove != null && !markersToRemove.isEmpty()) {
+                // Remove markers from map and lists
+                for (Marker marker : markersToRemove) {
+                    marker.remove();
+                    markers.remove(marker);
+                    removedCount++;
+                }
+                // Clear the title map entry
+                markersByTitle.remove(title);
+            }
+
+            JSObject result = new JSObject();
+            result.put("cleared", true);
+            result.put("removedCount", removedCount);
+            result.put("message", "Cleared " + removedCount + " marker(s) with title: " + title);
+            call.resolve(result);
+
+        } catch (Exception e) {
+            Log.e(MAPS_TAG, "Error clearing markers by title: " + e.getMessage());
+            call.reject("Failed to clear markers by title: " + e.getMessage());
+        }
+    });
+}
 
     @PluginMethod
     public void addCustomMarker(PluginCall call) throws JSONException {
@@ -790,6 +860,8 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
             if (marker != null) {
                 markers.add(marker);
+                // Add to title map for efficient lookups
+                markersByTitle.computeIfAbsent(title, k -> new ArrayList<>()).add(marker);
             }
 
             JSObject result = new JSObject();

@@ -36,6 +36,8 @@ export interface CapacitorMapSdkPlugin {
 
   clearExpectMarkers(options: { titles: string[] }): Promise<void>;
 
+  clearMarkersByTitle(options: { title: string }): Promise<void>;
+
   moveCamera(options: { latitude: number; longitude: number; zoom?: number }): Promise<void>;
 
   updateMapBounds(options: { x: number; y: number; width: number; height: number }): Promise<void>;

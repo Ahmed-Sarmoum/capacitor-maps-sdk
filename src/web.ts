@@ -30,6 +30,10 @@ export class CapacitorMapSdkWeb extends WebPlugin implements CapacitorMapSdkPlug
     throw new Error('CapacitorMapSdk is not implemented on web');
   }
 
+  clearMarkersByTitle(): Promise<void> {
+    throw new Error('CapacitorMapSdk is not implemented on web');
+  }
+
   async initialize(): Promise<void> {
     throw new Error('CapacitorMapSdk is not implemented on web');
   }
