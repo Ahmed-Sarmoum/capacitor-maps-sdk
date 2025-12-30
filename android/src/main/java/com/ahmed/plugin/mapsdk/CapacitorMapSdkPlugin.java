@@ -851,11 +851,30 @@ public void clearMarkersByTitle(PluginCall call) {
                     return;
                 }
             }
+            float zIndex;
+            if ("userMarker".equals(title)) {
+                // Give userMarker the highest z-index to always be on top
+                zIndex = 999999f;
+            } else {
+                // Calculate the highest z-index from existing markers (excluding userMarker)
+                float highestZIndex = 0f;
+                for (Marker existingMarker : markers) {
+                    if (existingMarker != null &&
+                        !"userMarker".equals(existingMarker.getTitle()) &&
+                        existingMarker.getZIndex() > highestZIndex) {
+                        highestZIndex = existingMarker.getZIndex();
+                    }
+                }
+                zIndex = highestZIndex + 1f;
+            }
 
+
+            // Add marker with z-index higher than all existing markers
             Marker marker = googleMap.addMarker(new MarkerOptions()
                     .position(latLng)
                     .icon(BitmapDescriptorFactory.fromBitmap(bitmap))
                     .title(title)
+                    .zIndex(zIndex)  // Set z-index to be on top
             );
 
             if (marker != null) {
