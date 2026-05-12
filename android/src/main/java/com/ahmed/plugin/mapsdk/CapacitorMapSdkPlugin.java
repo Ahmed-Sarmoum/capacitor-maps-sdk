@@ -72,6 +72,12 @@ public class CapacitorMapSdkPlugin extends Plugin {
     private boolean showLocationButton = true;
     private PluginCall pendingLocationCall = null;
 
+    // Stored button margins (in dp) so we can reposition on updateMapBounds
+    private int locationButtonLeft   = 0;
+    private int locationButtonRight  = 0;
+    private int locationButtonTop    = 0;
+    private int locationButtonBottom = 0;
+
     // Map configuration
     private int mapX = 0;
     private int mapY = 0;
@@ -90,7 +96,7 @@ public class CapacitorMapSdkPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void initialize(PluginCall call) throws PackageManager.NameNotFoundException {
+    public void initialize(PluginCall call) {
         Context context = getContext();
         String apiKey = call.getString("apiKey");
 
@@ -103,24 +109,32 @@ public class CapacitorMapSdkPlugin extends Plugin {
         String containerId = call.getString("containerId", "map-container");
         showLocationButton = call.getBoolean("showLocationButton", false);
 
-        // Get map dimensions and position from the container
+        // Read actual element bounds from the WebView DOM — Android resource ID lookup
+        // doesn't work for HTML element IDs (especially ones with hyphens like "census-map-container")
         getActivity().runOnUiThread(() -> {
-            View container = getActivity().findViewById(
-                    context.getResources().getIdentifier(containerId, "id", context.getPackageName())
-            );
-
-            if (container != null) {
-                // Get container bounds
-                int[] location = new int[2];
-                container.getLocationOnScreen(location);
-                mapX = location[0];
-                mapY = location[1];
-                mapWidth = container.getWidth();
-                mapHeight = container.getHeight();
-            }
-
-
-            initializeMap(apiKey, call);
+            String js = "(function() {" +
+                    "var el = document.getElementById('" + containerId + "');" +
+                    "if (!el) return null;" +
+                    "var r = el.getBoundingClientRect();" +
+                    "return {x: Math.round(r.left), y: Math.round(r.top)," +
+                    " w: Math.round(r.width), h: Math.round(r.height)};" +
+                    "})()";
+            getBridge().getWebView().evaluateJavascript(js, result -> {
+                getActivity().runOnUiThread(() -> {
+                    if (result != null && !result.equals("null")) {
+                        try {
+                            org.json.JSONObject bounds = new org.json.JSONObject(result);
+                            mapX = bounds.getInt("x");
+                            mapY = bounds.getInt("y");
+                            mapWidth = bounds.getInt("w");
+                            mapHeight = bounds.getInt("h");
+                        } catch (Exception e) {
+                            Log.e(MAPS_TAG, "Could not read map element bounds: " + e.getMessage());
+                        }
+                    }
+                    initializeMap(apiKey, call);
+                });
+            });
         });
     }
 
@@ -223,76 +237,78 @@ public class CapacitorMapSdkPlugin extends Plugin {
     private void createLocationButton(PluginCall call) {
         JSObject locationButtonPosition = call.getObject("locationButtonPosition", null);
 
-        Integer left = 0;
-        Integer right = 0;
-        Integer top = 0;
-        Integer bottom = 0;
-
+        // Store margins in dp so updateMapBounds can reuse them when repositioning
         if (locationButtonPosition != null) {
-            if (locationButtonPosition.has("left")) {
-                left = locationButtonPosition.getInteger("left");
-            }
-            if (locationButtonPosition.has("right")) {
-                right = locationButtonPosition.getInteger("right");
-            }
-            if (locationButtonPosition.has("top")) {
-                top = locationButtonPosition.getInteger("top");
-            }
-            if (locationButtonPosition.has("bottom")) {
-                bottom = locationButtonPosition.getInteger("bottom");
-            }
+            if (locationButtonPosition.has("left"))   locationButtonLeft   = locationButtonPosition.getInteger("left");
+            if (locationButtonPosition.has("right"))  locationButtonRight  = locationButtonPosition.getInteger("right");
+            if (locationButtonPosition.has("top"))    locationButtonTop    = locationButtonPosition.getInteger("top");
+            if (locationButtonPosition.has("bottom")) locationButtonBottom = locationButtonPosition.getInteger("bottom");
         }
+
         Context context = getContext();
 
-        // Create the button
         currentLocationButton = new ImageButton(context);
 
-        // Create custom colored background
         Drawable locationIcon = ContextCompat.getDrawable(context, android.R.drawable.ic_menu_mylocation);
         if (locationIcon != null) {
-            locationIcon.setTint(Color.BLACK); // Black icon
+            locationIcon.setTint(Color.BLACK);
         }
 
-        // Set button style and icon
         currentLocationButton.setImageDrawable(locationIcon);
-        currentLocationButton.setBackgroundColor(Color.WHITE); // White background
         currentLocationButton.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
-        currentLocationButton.setPadding(20, 20, 20, 20);
 
-        // Add rounded corners and elevation for shadow
-        currentLocationButton.setElevation(8f); // Shadow
-        currentLocationButton.setStateListAnimator(null); // Remove default animation
+        // Use dp-scaled values so the button looks identical on phones and tablets
+        int pad = getScaledPixels(getBridge(), 8);
+        currentLocationButton.setPadding(pad, pad, pad, pad);
+        currentLocationButton.setElevation(getScaledPixels(getBridge(), 4));
+        currentLocationButton.setStateListAnimator(null);
 
-        // Create rounded background drawable
         android.graphics.drawable.GradientDrawable roundedBackground = new android.graphics.drawable.GradientDrawable();
         roundedBackground.setColor(Color.WHITE);
-        roundedBackground.setCornerRadius(24f); // Rounded corners (adjust as needed)
-        roundedBackground.setStroke(1, Color.parseColor("#E0E0E0")); // Optional subtle border
-
-        // Set the rounded background
+        roundedBackground.setCornerRadius(getScaledPixels(getBridge(), 10));
+        roundedBackground.setStroke(getScaledPixels(getBridge(), 1), Color.parseColor("#E0E0E0"));
         currentLocationButton.setBackground(roundedBackground);
 
-        // Set button size and position
-        int buttonSize = getScaledPixels(getBridge(), 48);
-        int margin = getScaledPixels(getBridge(), 16);
-
-        FrameLayout.LayoutParams buttonParams = new FrameLayout.LayoutParams(
-                buttonSize, buttonSize
-        );
-
-        // Position to bottom right
-        buttonParams.gravity = Gravity.BOTTOM | Gravity.END;
-        buttonParams.setMargins(left, top,  right, bottom + 200);
-
+        // Tablets have a larger smallest-screen width; cap the button at 40dp on large screens
+        int smallestWidthDp = getContext().getResources().getConfiguration().smallestScreenWidthDp;
+        int buttonDp = smallestWidthDp >= 600 ? 40 : 48;
+        int buttonSize = getScaledPixels(getBridge(), buttonDp);
+        FrameLayout.LayoutParams buttonParams = new FrameLayout.LayoutParams(buttonSize, buttonSize);
         currentLocationButton.setLayoutParams(buttonParams);
 
-        // Set click listener
         currentLocationButton.setOnClickListener(v -> getCurrentLocation());
 
-        // Add button to map container
         mapContainer.addView(currentLocationButton);
 
+        // Initial position — will be corrected by updateMapBounds() called from JS
+        applyLocationButtonPosition();
+    }
 
+    private void applyLocationButtonPosition() {
+        if (currentLocationButton == null) return;
+
+        int smallestWidthDp = getContext().getResources().getConfiguration().smallestScreenWidthDp;
+        int buttonDp = smallestWidthDp >= 600 ? 40 : 48;
+        int buttonSize = getScaledPixels(getBridge(), buttonDp);
+        int right  = getScaledPixels(getBridge(), locationButtonRight);
+        int bottom = getScaledPixels(getBridge(), locationButtonBottom);
+        int left   = getScaledPixels(getBridge(), locationButtonLeft);
+        int top    = getScaledPixels(getBridge(), locationButtonTop);
+
+        FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) currentLocationButton.getLayoutParams();
+
+        if (mapWidth > 0 && mapHeight > 0) {
+            // Position button at the bottom-right corner of the visible map area
+            p.gravity = Gravity.TOP | Gravity.START;
+            p.leftMargin = getScaledPixels(getBridge(), mapX) + getScaledPixels(getBridge(), mapWidth)  - buttonSize - right;
+            p.topMargin  = getScaledPixels(getBridge(), mapY) + getScaledPixels(getBridge(), mapHeight) - buttonSize - bottom;
+        } else {
+            p.gravity = Gravity.BOTTOM | Gravity.END;
+            p.setMargins(left, top, right, bottom);
+        }
+
+        currentLocationButton.setLayoutParams(p);
+        currentLocationButton.requestLayout();
     }
 
     @PluginMethod
@@ -412,10 +428,17 @@ public class CapacitorMapSdkPlugin extends Plugin {
             }
 
             // Get new bounds
-            int x = call.getInt("x", mapX);
-            int y = call.getInt("y", mapY);
-            int width = call.getInt("width", mapWidth);
-            int height = call.getInt("height", mapHeight);
+            int x = call.getInt("x", 0);
+            int y = call.getInt("y", 0);
+            int width = call.getInt("width", 0);
+            int height = call.getInt("height", 0);
+
+            // Ignore zero-dimension updates — happens when called during a sheet/dialog
+            // open animation before the element has reached its final size
+            if (width <= 0 || height <= 0) {
+                call.resolve();
+                return;
+            }
 
             Bridge bridge = getBridge();
 
@@ -434,6 +457,9 @@ public class CapacitorMapSdkPlugin extends Plugin {
 
             mapView.setLayoutParams(layoutParams);
             mapView.requestLayout();
+
+            // Reposition the location button to match the updated map bounds
+            applyLocationButtonPosition();
 
             call.resolve();
         });
@@ -827,14 +853,16 @@ public void clearMarkersByTitle(PluginCall call) {
             Bitmap bitmap = null;
 
             if (iconImage != null && iconImage.startsWith("data:image")) {
-                // Handle base64 image
+                // Handle base64 image — scale to a fixed dp target so the marker
+                // appears at the same physical size on phones and tablets
                 String base64Data = iconImage.substring(iconImage.indexOf(",") + 1);
                 byte[] decodedBytes = Base64.decode(base64Data, Base64.DEFAULT);
                 Bitmap original = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
 
-                float scaleFactor = 1.5f;
-                int newWidth = (int)(original.getWidth() * scaleFactor);
-                int newHeight = (int)(original.getHeight() * scaleFactor);
+                int targetPx = getScaledPixels(getBridge(), 36); // 36dp on every screen
+                float aspectRatio = (float) original.getHeight() / original.getWidth();
+                int newWidth  = targetPx;
+                int newHeight = Math.round(targetPx * aspectRatio);
                 bitmap = Bitmap.createScaledBitmap(original, newWidth, newHeight, true);
             } else {
                 try {
